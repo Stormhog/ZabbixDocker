@@ -1,0 +1,55 @@
+version: '3.5'
+
+services:
+  zabbix-db:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: zabbix
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix
+    volumes:
+      - zabbix-db-data:/var/lib/postgresql/data
+    networks:
+      - zabbix-net
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:latest
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_DB: zabbix
+    depends_on:
+      - zabbix-db
+    ports:
+      - "10051:10051"
+    volumes:
+      - zabbix-server-data:/var/lib/zabbix
+    networks:
+      - zabbix-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:latest
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_DB: zabbix
+      ZBX_SERVER_HOST: zabbix-server
+    depends_on:
+      - zabbix-server
+      - zabbix-db
+    ports:
+      - "8080:8080"
+    networks:
+      - zabbix-net
+
+volumes:
+  zabbix-db-data:
+  zabbix-server-data:
+
+networks:
+  zabbix-net:
+    driver: bridge

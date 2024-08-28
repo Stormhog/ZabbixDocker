@@ -1,0 +1,101 @@
+---
+- name: Install Docker and Zabbix Agent 2, then run Docker Compose
+  hosts: localhost
+  gather_facts: yes
+  become: yes
+
+  tasks:
+    - name: Update apt and install prerequisites
+      apt:
+        update_cache: yes
+        name: 
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+      register: apt_get_status
+      until: apt_get_status is success
+      retries: 60
+      delay: 10  
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: docker-ce
+        state: present
+        update_cache: yes
+      register: apt_get_status
+      until: apt_get_status is success
+      retries: 60
+      delay: 10  
+
+    - name: Install Docker Compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.29.0/docker-compose-{{ ansible_system }}-{{ ansible_userspace_architecture }}
+        dest: /usr/local/bin/docker-compose
+        mode: '0755'
+
+    - name: Install Zabbix repository
+      apt_key:
+        url: https://repo.zabbix.com/zabbix-official-repo.key
+        state: present
+
+    - name: Add Zabbix repository
+      apt_repository:
+        repo: deb http://repo.zabbix.com/zabbix/7.0/ubuntu {{ ansible_distribution_release }} main
+        state: present
+
+    - name: Install Zabbix Agent 2
+      apt:
+        name: 
+          - zabbix-agent2
+          - zabbix-agent2-plugin-*
+        state: present
+        update_cache: yes
+      register: apt_get_status
+      until: apt_get_status is success
+      retries: 60
+      delay: 10
+    
+    - name: Start and enable Zabbix Agent 2
+      service:
+        name: zabbix-agent2
+        state: started
+        enabled: yes
+
+    - name: Copy Docker Compose file
+      copy:
+        src: "{{ playbook_dir }}/docker-compose_bridge.yml"
+        dest: "{{ playbook_dir }}/docker-compose.yml"
+
+    - name: Run Docker Compose and get the containers up
+      command: docker-compose -f {{ playbook_dir }}/docker-compose.yml up -d
+      
+    - name: Copy Zabbix-Agent2 config file
+      copy:
+        src: "{{ playbook_dir }}/ZabbixAgent/zabbix_agent2.conf"
+        dest: "/etc/zabbix/zabbix_agent2.conf"
+    
+    - name: Copy test UserParams script and make executable  
+      copy:
+        src: "{{ playbook_dir }}/ZabbixAgent/test.sh"
+        dest: "/usr/local/bin"
+    
+    - name: Make test script executable  
+      command: "chmod +x /usr/local/bin/test.sh"
+      
+    - name: Restart zabbix-agent2.service
+      ansible.builtin.service:
+        name: zabbix-agent2.service
+        state: restarted
+
